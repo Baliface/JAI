@@ -258,7 +258,7 @@ async def worker(worker_id: int):
         try:
             await job.message.answer("⚙️ Генерация... Ожидай 20-30 секунд!")
             
-            resize_image(job.user_photo)
+            await asyncio.to_thread(resize_image, job.user_photo)
 
             await asyncio.to_thread(
                 run_facefusion,
