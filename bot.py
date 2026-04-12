@@ -12,7 +12,7 @@ from aiogram.filters import CommandStart
 from PIL import Image
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
-CHANNEL = "@balimusicl"
+CHANNEL = "@balimusic1"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
