@@ -40,6 +40,18 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 USERS_FILE = "users.txt"
 
 
+def warmup_facefusion():
+    subprocess.run([
+        "/root/bot/project/venv/bin/python",
+        "facefusion.py",
+        "headless-run",
+        "-s", "/root/bot/project/test.jpg",
+        "-t", "/root/bot/project/test.jpg",
+        "-o", "/root/bot/project/warmup.jpg",
+        "--execution-providers", "cpu",
+        "--face-mask-types", "box"
+    ], cwd=FACEFUSION_PATH)
+
 def resize_image(path):
     img = Image.open(path)
     img = img.resize((512, 512))
@@ -222,6 +234,8 @@ async def fallback(message: Message):
 
 
 def run_facefusion(source, target, output):
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     result = subprocess.run([
         "/root/bot/project/venv/bin/python",
         "facefusion.py",
@@ -233,7 +247,7 @@ def run_facefusion(source, target, output):
         "--face-mask-types", "box",
         "--face-mask-padding", "0.15",
         "--face-mask-blur", "0"
-    ], cwd=FACEFUSION_PATH, capture_output=True, text=True)
+    ], env=env, cwd=FACEFUSION_PATH, capture_output=True, text=True)
 
     print("=== FACEFUSION STDOUT ===")
     print(result.stdout)
@@ -316,6 +330,7 @@ async def worker(worker_id: int):
 
 
 async def start_workers():
+    warmup_facefusion()
     for i in range(WORKERS_COUNT):
         asyncio.create_task(worker(i + 1))
 
