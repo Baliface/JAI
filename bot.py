@@ -16,7 +16,6 @@ from aiogram.filters import CommandStart
 from PIL import Image
 from collections import deque
 
-
 QUEUE_LIST = deque()
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
@@ -40,6 +39,7 @@ ACTIVE_USERS = set()
 USER_COOLDOWN = {}
 COOLDOWN_SEC = 30
 
+QUEUE_LIST = []
 QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
@@ -272,23 +272,12 @@ async def worker(worker_id: int):
 
     global MODEL_WARMED
 
+
     while True:
         job = await QUEUE.get()
         user_id = job.message.from_user.id
 
         try:
-            if not MODEL_WARMED:
-                await job.message.answer("🔥 прогреваю модель...")
-
-                await asyncio.to_thread(
-                    run_facefusion,
-                    "/root/bot/project/test.jpg",
-                    "/root/bot/project/test.jpg",
-                    "/root/bot/project/warm.jpg"
-                )
-
-                MODEL_WARMED = True
-
             await job.message.answer("⚙️ Генерация... Ожидай 10-20 секунд!")
             
             await asyncio.to_thread(resize_image, job.user_photo)
@@ -339,7 +328,7 @@ async def worker(worker_id: int):
 
 
 async def start_workers():
-    await asyncio.to_thread(warmup_facefusion)
+    warmup_facefusion()
     for i in range(WORKERS_COUNT):
         asyncio.create_task(worker(i + 1))
 
