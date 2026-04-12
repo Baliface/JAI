@@ -3,9 +3,7 @@ import os
 import subprocess
 import uuid
 import time
-import sys
 from dataclasses import dataclass
-from facefusion import cli
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
     Message, FSInputFile,
@@ -41,7 +39,6 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
-MODEL_WARMED = False
 
 def warmup_facefusion():
     subprocess.run([
@@ -237,7 +234,10 @@ async def fallback(message: Message):
 
 
 def run_facefusion(source, target, output):
-    sys.argv = [
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    result = subprocess.run([
+        "/root/bot/project/venv/bin/python",
         "facefusion.py",
         "headless-run",
         "-s", source,
@@ -245,11 +245,20 @@ def run_facefusion(source, target, output):
         "-o", output,
         "--execution-providers", "cpu",
         "--face-mask-types", "box",
-        "--face-mask-padding", "0.1",
+        "--face-mask-padding", "0.15",
         "--face-mask-blur", "0"
-    ]
+    ], env=env,cwd=FACEFUSION_PATH, capture_output=True, text=True)
 
-    cli()
+    print("=== FACEFUSION STDOUT ===")
+    print(result.stdout)
+
+    print("=== FACEFUSION STDERR ===")
+    print(result.stderr)
+
+    print("RETURN CODE:", result.returncode)
+
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr)
 
 
 def safe_remove(path: str):
