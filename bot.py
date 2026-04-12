@@ -40,7 +40,6 @@ ACTIVE_USERS = set()
 USER_COOLDOWN = {}
 COOLDOWN_SEC = 30
 
-QUEUE_LIST = []
 QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
@@ -340,7 +339,7 @@ async def worker(worker_id: int):
 
 
 async def start_workers():
-    warmup_facefusion()
+    await asyncio.to_thread(warmup_facefusion)
     for i in range(WORKERS_COUNT):
         asyncio.create_task(worker(i + 1))
 
