@@ -32,6 +32,8 @@ ACTIVE_USERS = set()
 USER_COOLDOWN = {}
 COOLDOWN_SEC = 30
 
+QUEUE_LIST = []
+QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 @dataclass
 class Job:
@@ -40,6 +42,26 @@ class Job:
     result_photo: str
     banner_path: str
 
+async def update_queue_positions():
+    while True:
+        try:
+            for i, job in enumerate(QUEUE_LIST):
+                user_id = job.message.from_user.id
+                pos = i + 1
+
+                try:
+                    # создаём/обновляем сообщение очереди
+                    if user_id in QUEUE_MESSAGES:
+                        await QUEUE_MESSAGES[user_id].edit_text(
+                            f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!"
+                        )
+                except:
+                    pass
+
+        except:
+            pass
+
+        await asyncio.sleep(3)
 
 # 🔍 подписка
 async def check_sub(user_id: int) -> bool:
@@ -223,6 +245,13 @@ async def worker(worker_id: int):
 
             ACTIVE_USERS.discard(user_id)
             USER_COOLDOWN[user_id] = time.time()
+            
+            try:
+                QUEUE_LIST.remove(job)
+            except:
+                pass
+
+            QUEUE_MESSAGES.pop(user_id, None)
 
             QUEUE.task_done()
 
@@ -231,11 +260,13 @@ async def start_workers():
     for i in range(WORKERS_COUNT):
         asyncio.create_task(worker(i + 1))
 
+    asyncio.create_task(update_queue_positions())
+
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
     user_id = message.from_user.id
-
+    
     if user_id not in USER_STATE:
         await message.answer("👉 /start сначала")
         return
@@ -295,16 +326,19 @@ async def handle_photo(message: Message):
 
     ACTIVE_USERS.add(user_id)
 
-    pos = QUEUE.qsize() + len(ACTIVE_USERS)
-    await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
+    pos = len(QUEUE_LIST) + len(ACTIVE_USERS)
+    msg = await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
+    QUEUE_MESSAGES[user_id] = msg
 
-    await QUEUE.put(Job(
-    message=message,
-    user_photo=user_photo,
-    result_photo=result_photo,
-    banner_path=banner_path
-    ))
+    job = Job(
+        message=message,
+        user_photo=user_photo,
+        result_photo=result_photo,
+        banner_path=banner_path
+    )
 
+    QUEUE_LIST.append(job)
+    await QUEUE.put(job)
 
 async def main():
     await start_workers()
