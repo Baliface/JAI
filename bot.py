@@ -91,8 +91,8 @@ async def choose_template(callback: CallbackQuery):
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="🖼 Баннер", callback_data="type_banner"),
-                InlineKeyboardButton(text="📕 Обложка", callback_data="type_cover"),
+                InlineKeyboardButton(text="🖼 Баннер", callback_data="banner"),
+                InlineKeyboardButton(text="📕 Обложка", callback_data="cover"),
             ]
         ])
 
@@ -235,7 +235,7 @@ async def handle_photo(message: Message):
             "girl_short": "/root/bot/project/banners/girl_short.jpg",
             "girl_long": "/root/bot/project/banners/girl_long.jpg",
         },
-        "type_cover": {
+        "cover": {
             "boy_short": "/root/bot/project/covers/boy_short.jpg",
             "boy_long": "/root/bot/project/covers/boy_long.jpg",
             "girl_short": "/root/bot/project/covers/girl_short.jpg",
@@ -243,7 +243,7 @@ async def handle_photo(message: Message):
         }
     }
 
-    output_type = state.get("output_type", "banner")
+    output_type = state.get("output_type", "banner").replace("type_", "")
     template = state["template"]
 
     banner_path = assets[output_type][template]
