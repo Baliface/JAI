@@ -26,7 +26,7 @@ FACEFUSION_PATH = "/root/bot/project/facefusion"
 USER_STATE = {}
 
 QUEUE = asyncio.Queue()
-WORKERS_COUNT = 1
+WORKERS_COUNT = 2
 
 WAITING_SUB = set()
 
