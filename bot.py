@@ -99,7 +99,7 @@ async def choose_template(callback: CallbackQuery):
             await callback.answer()
             return
 
-        USER_STATE[user_id]["output_type"] = callback.data
+        USER_STATE[user_id]["output_type"] = "banner" if callback.data == "type_banner" else "cover"
 
         if await check_sub(user_id):
             await callback.message.answer("✅ Ты уже подписан!\n📸 Отправь фото")
