@@ -11,6 +11,7 @@ from aiogram.types import (
     CallbackQuery
 )
 from aiogram.filters import CommandStart
+from PIL import Image
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
 CHANNEL = "@balimusic1"
@@ -36,6 +37,27 @@ COOLDOWN_SEC = 30
 QUEUE_LIST = []
 QUEUE_MESSAGES = {}  # user_id -> message for editing
 
+USERS_FILE = "users.txt"
+
+def resize_image(path):
+    img = Image.open(path)
+    img = img.resize((512, 512))
+    img.save(path)
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return set()
+
+    with open(USERS_FILE, "r") as f:
+        return set(int(line.strip()) for line in f if line.strip())
+
+
+def save_user(user_id: int):
+    with open(USERS_FILE, "a") as f:
+        f.write(f"{user_id}\n")
+
+ALL_USERS = load_users()
+
 @dataclass
 class Job:
     message: Message
@@ -51,6 +73,7 @@ async def admin_panel(message: Message):
     queue_users = [job.message.from_user.id for job in QUEUE_LIST]
 
     text = (
+        f"👤 Всего пользователей: {len(ALL_USERS)}\n"
         f"👥 В очереди: {len(QUEUE_LIST)}\n"
         f"⚙️ Активных: {len(ACTIVE_USERS)}\n"
         f"⏳ Ждут подписку: {len(WAITING_SUB)}\n\n"
@@ -205,6 +228,7 @@ def run_facefusion(source, target, output):
         "-s", source,
         "-t", target,
         "-o", output,
+        "--execution-providers", "cuda",
         "--face-mask-types", "box",
         "--face-mask-padding", "0.3",
         "--face-mask-blur", "0.1"
@@ -233,6 +257,8 @@ async def worker(worker_id: int):
 
         try:
             await job.message.answer("⚙️ Генерация... Ожидай 20-30 секунд!")
+            
+            resize_image(job.user_photo)
 
             await asyncio.to_thread(
                 run_facefusion,
@@ -289,6 +315,10 @@ async def start_workers():
 @dp.message(F.photo)
 async def handle_photo(message: Message):
     user_id = message.from_user.id
+
+    if user_id not in ALL_USERS:
+        ALL_USERS.add(user_id)
+        save_user(user_id)
     
     if user_id not in USER_STATE:
         await message.answer("👉 /start сначала")
