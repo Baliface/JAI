@@ -256,7 +256,7 @@ async def worker(worker_id: int):
         user_id = job.message.from_user.id
 
         try:
-            await job.message.answer("⚙️ Генерация... Ожидай 20-30 секунд!")
+            await job.message.answer("⚙️ Генерация... Ожидай 10-20 секунд!")
             
             await asyncio.to_thread(resize_image, job.user_photo)
 
