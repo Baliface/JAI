@@ -283,7 +283,7 @@ async def handle_photo(message: Message):
         return
 
     if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
-        await message.answer("⛔ Кулдаун! Подожди еще 10 секунд!")
+        await message.answer("⛔ Кулдаун! Подожди еще 20 секунд!")
         return
 
     state = USER_STATE[user_id]
