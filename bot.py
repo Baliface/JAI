@@ -3,8 +3,6 @@ import os
 import subprocess
 import uuid
 import time
-import redis
-import json
 from dataclasses import dataclass
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
@@ -41,13 +39,6 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
-r = redis.Redis(host="localhost", port=6379, decode_responses=True)
-
-GPU_QUEUE = "gpu_queue"
-CPU_QUEUE = "cpu_queue"
-
-def push_job(queue_name, job):
-    r.lpush(queue_name, json.dumps(job))
 
 def warmup_facefusion():
     subprocess.run([
@@ -167,8 +158,9 @@ async def choose_template(callback: CallbackQuery):
 
     # шаг 1: выбор персонажа
     if callback.data in ["boy_short", "boy_long", "girl_short", "girl_long"]:
-        USER_STATE.setdefault(user_id, {})
-        USER_STATE[user_id]["template"] = callback.data
+        USER_STATE[user_id] = {
+            "template": callback.data
+        }
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -188,7 +180,6 @@ async def choose_template(callback: CallbackQuery):
             await callback.answer()
             return
 
-        USER_STATE.setdefault(user_id, {})
         USER_STATE[user_id]["output_type"] = "banner" if callback.data == "type_banner" else "cover"
 
         if await check_sub(user_id):
@@ -354,18 +345,9 @@ async def handle_photo(message: Message):
         ALL_USERS.add(user_id)
         save_user(user_id)
     
-    state = USER_STATE.get(user_id)
-
-    if not state:
+    if user_id not in USER_STATE:
         await message.answer("👉 /start сначала")
         return
-
-    if "template" not in state:
-        await message.answer("👉 сначала выбери тип (boy/girl)")
-        return
-
-    if "output_type" not in state:
-        state["output_type"] = "banner"
 
     if not await check_sub(user_id):
         WAITING_SUB.add(user_id)
@@ -434,19 +416,7 @@ async def handle_photo(message: Message):
     )
 
     QUEUE_LIST.append(job)
-
-    job_data = {
-        "user_id": user_id,
-        "user_photo": user_photo,
-        "result_photo": result_photo,
-        "banner_path": banner_path
-    }
-    gpu_load = r.llen(GPU_QUEUE)
-
-    if gpu_load < 20:
-        push_job(GPU_QUEUE, job_data)
-    else:
-        push_job(CPU_QUEUE, job_data)
+    await QUEUE.put(job)
 
 async def main():
     await start_workers()
