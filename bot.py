@@ -24,7 +24,7 @@ FACEFUSION_PATH = "/root/bot/project/facefusion"
 USER_STATE = {}
 
 QUEUE = asyncio.Queue()
-WORKERS_COUNT = 2
+WORKERS_COUNT = 1
 
 WAITING_SUB = set()
 
@@ -295,7 +295,7 @@ async def handle_photo(message: Message):
 
     ACTIVE_USERS.add(user_id)
 
-    pos = QUEUE.qsize() + len(ACTIVE_USERS) + 1
+    pos = QUEUE.qsize() + len(ACTIVE_USERS)
     await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
 
     await QUEUE.put(Job(
