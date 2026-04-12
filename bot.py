@@ -74,23 +74,49 @@ async def start(message: Message):
 @dp.callback_query()
 async def choose_template(callback: CallbackQuery):
     user_id = callback.from_user.id
-    USER_STATE[user_id] = callback.data
 
-    if await check_sub(user_id):
-        await callback.message.answer("✅ Ты уже подписан!\n📸 Отправь фото")
-    else:
-        WAITING_SUB.add(user_id)
+    # шаг 1: выбор персонажа
+    if callback.data in ["boy_short", "boy_long", "girl_short", "girl_long"]:
+        USER_STATE[user_id] = {
+            "template": callback.data
+        }
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Я подписался", callback_data="check_sub")]
+            [
+                InlineKeyboardButton(text="🖼 Баннер", callback_data="type_banner"),
+                InlineKeyboardButton(text="📕 Обложка", callback_data="type_cover"),
+            ]
         ])
 
-        await callback.message.answer(
-            f"❗️ Подпишись:\n{CHANNEL}\n\nИ нажми кнопку 👇",
-            reply_markup=kb
-        )
+        await callback.message.answer("Теперь выбери формат 👇", reply_markup=kb)
+        await callback.answer()
+        return
 
-    await callback.answer()
+    # шаг 2: выбор типа результата
+    if callback.data in ["type_banner", "type_cover"]:
+        if user_id not in USER_STATE:
+            await callback.message.answer("👉 /start сначала")
+            await callback.answer()
+            return
+
+        USER_STATE[user_id]["output_type"] = callback.data
+
+        if await check_sub(user_id):
+            await callback.message.answer("✅ Ты уже подписан!\n📸 Отправь фото")
+        else:
+            WAITING_SUB.add(user_id)
+
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📢 Я подписался", callback_data="check_sub")]
+            ])
+
+            await callback.message.answer(
+                f"❗️ Подпишись:\n{CHANNEL}\n\nИ нажми кнопку 👇",
+                reply_markup=kb
+            )
+
+        await callback.answer()
+        return
 
 
 @dp.callback_query(F.data == "check_sub")
@@ -230,18 +256,36 @@ async def handle_photo(message: Message):
         await message.answer("⛔ Кулдаун")
         return
 
-    template = USER_STATE[user_id]
+    state = USER_STATE[user_id]
+    template = state["template"]
+    output_type = state.get("output_type", "banner")
 
-    banners = {
-        "boy_short": r"C:\ai\project\banners\boy_short.jpg",
-        "boy_long": r"C:\ai\project\banners\boy_long.jpg",
-        "girl_short": r"C:\ai\project\banners\girl_short.jpg",
-        "girl_long": r"C:\ai\project\banners\girl_long.jpg",
+    assets = {
+        "banner": {
+            "boy_short": "/root/bot/project/banners/boy_short.jpg",
+            "boy_long": "/root/bot/project/banners/boy_long.jpg",
+            "girl_short": "/root/bot/project/banners/girl_short.jpg",
+            "girl_long": "/root/bot/project/banners/girl_long.jpg",
+        },
+        "cover": {
+            "boy_short": "/root/bot/project/covers/boy_short.jpg",
+            "boy_long": "/root/bot/project/covers/boy_long.jpg",
+            "girl_short": "/root/bot/project/covers/girl_short.jpg",
+            "girl_long": "/root/bot/project/covers/girl_long.jpg",
+        }
     }
 
-    if template not in banners:
-        await message.answer("❌ /start сначала")
+    output_type = state.get("output_type", "banner")
+    template = state["template"]
+
+    if output_type not in assets:
+        output_type = "banner"
+
+    if template not in assets[output_type]:
+        await message.answer("❌ Ошибка шаблона, /start сначала")
         return
+
+    banner_path = assets[output_type][template]
 
     uid = str(uuid.uuid4())
     user_photo = os.path.join(BASE_PATH, f"{uid}_user.jpg")
@@ -256,10 +300,10 @@ async def handle_photo(message: Message):
     await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
 
     await QUEUE.put(Job(
-        message=message,
-        user_photo=user_photo,
-        result_photo=result_photo,
-        banner_path=banners[template]
+    message=message,
+    user_photo=user_photo,
+    result_photo=result_photo,
+    banner_path=banner_path
     ))
 
 
