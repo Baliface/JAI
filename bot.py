@@ -65,7 +65,7 @@ async def start(message: Message):
     ])
 
     await message.answer(
-        "Здарова, ща мы тебя вклеим в баннер и ты будешь прямо как авторы \"JEALOUS\"!\n\nВыбери тип 👇",
+        "Здарова, ща мы тебя вклеим в баннер / обложку и ты будешь прямо как авторы \"JEALOUS\"!\n\nВыбери тип 👇",
         reply_markup=kb
     )
 
@@ -252,7 +252,7 @@ async def handle_photo(message: Message):
         return
 
     if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
-        await message.answer("⛔ Кулдаун")
+        await message.answer("⛔ Кулдаун! Подожди еще 10 секунд!")
         return
 
     state = USER_STATE[user_id]
