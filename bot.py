@@ -167,9 +167,8 @@ async def choose_template(callback: CallbackQuery):
 
     # шаг 1: выбор персонажа
     if callback.data in ["boy_short", "boy_long", "girl_short", "girl_long"]:
-        USER_STATE[user_id] = {
-            "template": callback.data
-        }
+        USER_STATE.setdefault(user_id, {})
+        USER_STATE[user_id]["template"] = callback.data
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -189,6 +188,7 @@ async def choose_template(callback: CallbackQuery):
             await callback.answer()
             return
 
+        USER_STATE.setdefault(user_id, {})
         USER_STATE[user_id]["output_type"] = "banner" if callback.data == "type_banner" else "cover"
 
         if await check_sub(user_id):
@@ -354,9 +354,18 @@ async def handle_photo(message: Message):
         ALL_USERS.add(user_id)
         save_user(user_id)
     
-    if user_id not in USER_STATE:
+    state = USER_STATE.get(user_id)
+
+    if not state:
         await message.answer("👉 /start сначала")
         return
+
+    if "template" not in state:
+        await message.answer("👉 сначала выбери тип (boy/girl)")
+        return
+
+    if "output_type" not in state:
+        state["output_type"] = "banner"
 
     if not await check_sub(user_id):
         WAITING_SUB.add(user_id)
