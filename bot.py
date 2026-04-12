@@ -25,7 +25,6 @@ WORKERS_COUNT = 5
 
 USER_STATE = {}
 WAITING_SUB = set()
-
 ACTIVE_USERS = set()
 USER_COOLDOWN = {}
 COOLDOWN_SEC = 30
@@ -39,7 +38,7 @@ class Job:
     banner_path: str
 
 
-# ================= FIX IMAGE (ВАЖНО) =================
+# ================= IMAGE FIX =================
 
 def fix_image(path: str):
     try:
@@ -82,84 +81,94 @@ async def start(message: Message):
 
 # ================= CALLBACK =================
 
-@dp.callback_query()
-async def choose_template(callback: CallbackQuery):
+@dp.callback_query(F.data.in_({
+    "boy_short", "boy_long", "girl_short", "girl_long",
+    "banner", "cover", "check_sub"
+}))
+async def callback_router(callback: CallbackQuery):
     user_id = callback.from_user.id
+    data = callback.data
 
-    if callback.data in ["boy_short", "boy_long", "girl_short", "girl_long"]:
-        USER_STATE[user_id] = {"template": callback.data}
+    try:
+        # STEP 1: template
+        if data in ["boy_short", "boy_long", "girl_short", "girl_long"]:
+            USER_STATE[user_id] = {"template": data}
 
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🖼 Баннер", callback_data="type_banner"),
-                InlineKeyboardButton(text="📕 Обложка", callback_data="type_cover"),
-            ]
-        ])
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🖼 Баннер", callback_data="banner"),
+                    InlineKeyboardButton(text="📕 Обложка", callback_data="cover"),
+                ]
+            ])
 
-        await callback.message.answer("Теперь выбери формат 👇", reply_markup=kb)
-        await callback.answer()
-        return
-
-    if callback.data in ["banner", "cover"]:
-        if user_id not in USER_STATE:
-            await callback.message.answer("👉 /start сначала")
+            await callback.message.answer("Теперь выбери формат 👇", reply_markup=kb)
             await callback.answer()
             return
 
-        USER_STATE[user_id]["output_type"] = callback.data
+        # STEP 2: format
+        if data in ["banner", "cover"]:
+            state = USER_STATE.get(user_id)
+            if not state or "template" not in state:
+                await callback.message.answer("👉 /start сначала")
+                await callback.answer()
+                return
 
-        if await check_sub(user_id):
-            await callback.message.answer("✅ Ты уже подписан!\n📸 Отправь фото")
-        else:
-            WAITING_SUB.add(user_id)
+            USER_STATE[user_id]["output_type"] = data
 
-            kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📢 Я подписался", callback_data="check_sub")]
-            ])
+            if await check_sub(user_id):
+                await callback.message.answer("✅ Ты уже подписан!\n📸 Отправь фото")
+            else:
+                WAITING_SUB.add(user_id)
 
-            await callback.message.answer(
-                f"❗️ Подпишись:\n{CHANNEL}\n\nИ нажми кнопку 👇",
-                reply_markup=kb
-            )
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📢 Я подписался", callback_data="check_sub")]
+                ])
 
-        await callback.answer()
-        return
+                await callback.message.answer(
+                    f"❗️ Подпишись:\n{CHANNEL}\n\nИ нажми кнопку 👇",
+                    reply_markup=kb
+                )
 
+            await callback.answer()
+            return
 
-@dp.callback_query(F.data == "check_sub")
-async def confirm_sub(callback: CallbackQuery):
-    user_id = callback.from_user.id
+        # STEP 3: subscription check
+        if data == "check_sub":
+            if await check_sub(user_id):
+                WAITING_SUB.discard(user_id)
+                await callback.message.answer("🔥 Окей, теперь кидай фото 📸")
+            else:
+                WAITING_SUB.add(user_id)
+                await callback.message.answer("❌ Ты не подписан")
 
-    if await check_sub(user_id):
-        WAITING_SUB.discard(user_id)
-        await callback.message.answer("🔥 Окей, теперь кидай фото 📸")
-    else:
-        await callback.message.answer("❌ Ты не подписан")
-        WAITING_SUB.add(user_id)
+            await callback.answer()
+            return
 
-    await callback.answer()
+    except Exception as e:
+        print("CALLBACK ERROR:", e)
+        await callback.answer("Ошибка", show_alert=True)
 
 
 # ================= FACEFUSION =================
 
 def run_facefusion(source, target, output):
-    result = subprocess.run([
-        "/root/bot/project/venv/bin/python",
-        "facefusion.py",
-        "headless-run",
-        "-s", source,
-        "-t", target,
-        "-o", output,
-        "--face-mask-padding", "0.0",
-        "--face-mask-blur", "0.0",
-    ],
-    cwd=FACEFUSION_PATH,
-    capture_output=True,
-    text=True)
+    try:
+        subprocess.run([
+            "/root/bot/project/venv/bin/python",
+            "facefusion.py",
+            "headless-run",
+            "-s", source,
+            "-t", target,
+            "-o", output,
+            "--face-mask-padding", "0.0",
+            "--face-mask-blur", "0.0",
+        ],
+        cwd=FACEFUSION_PATH,
+        capture_output=True,
+        text=True)
 
-    print("===== FACEFUSION DEBUG =====")
-    print(result.stderr)
-    print("============================")
+    except Exception as e:
+        print("FACEFUSION ERROR:", e)
 
 
 # ================= WORKER =================
@@ -180,7 +189,7 @@ async def worker(worker_id: int):
             )
 
             ok = False
-            for _ in range(25):
+            for _ in range(30):
                 if os.path.exists(job.result_photo) and os.path.getsize(job.result_photo) > 0:
                     ok = True
                     break
@@ -193,12 +202,15 @@ async def worker(worker_id: int):
             await job.message.answer_photo(FSInputFile(job.result_photo))
 
         except Exception as e:
-            await job.message.answer(f"❌ Ошибка: {e}")
+            print("WORKER ERROR:", e)
+            await job.message.answer("❌ Ошибка генерации")
 
         finally:
             try:
-                os.remove(job.user_photo)
-                os.remove(job.result_photo)
+                if os.path.exists(job.user_photo):
+                    os.remove(job.user_photo)
+                if os.path.exists(job.result_photo):
+                    os.remove(job.result_photo)
             except:
                 pass
 
@@ -207,71 +219,88 @@ async def worker(worker_id: int):
             QUEUE.task_done()
 
 
-# ================= PHOTO HANDLER =================
+# ================= PHOTO =================
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
-    user_id = message.from_user.id
+    try:
+        user_id = message.from_user.id
 
-    if user_id not in USER_STATE:
-        await message.answer("👉 /start сначала")
-        return
+        if user_id in ACTIVE_USERS:
+            await message.answer("⛔ Уже идёт генерация")
+            return
 
-    if user_id in ACTIVE_USERS:
-        await message.answer("⛔ Уже идёт генерация")
-        return
+        now = time.time()
+        if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
+            await message.answer("⛔ Кулдаун")
+            return
 
-    now = time.time()
-    if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
-        await message.answer("⛔ Кулдаун")
-        return
+        state = USER_STATE.get(user_id)
+        if not state:
+            await message.answer("👉 /start сначала")
+            return
 
-    state = USER_STATE[user_id]
+        template = state.get("template")
+        output_type = state.get("output_type", "banner")
 
-    assets = {
-        "banner": {
-            "boy_short": "/root/bot/project/banners/boy_short.jpg",
-            "boy_long": "/root/bot/project/banners/boy_long.jpg",
-            "girl_short": "/root/bot/project/banners/girl_short.jpg",
-            "girl_long": "/root/bot/project/banners/girl_long.jpg",
-        },
-        "cover": {
-            "boy_short": "/root/bot/project/covers/boy_short.jpg",
-            "boy_long": "/root/bot/project/covers/boy_long.jpg",
-            "girl_short": "/root/bot/project/covers/girl_short.jpg",
-            "girl_long": "/root/bot/project/covers/girl_long.jpg",
+        if not template:
+            await message.answer("👉 /start сначала")
+            return
+
+        assets = {
+            "banner": {
+                "boy_short": "/root/bot/project/banners/boy_short.jpg",
+                "boy_long": "/root/bot/project/banners/boy_long.jpg",
+                "girl_short": "/root/bot/project/banners/girl_short.jpg",
+                "girl_long": "/root/bot/project/banners/girl_long.jpg",
+            },
+            "cover": {
+                "boy_short": "/root/bot/project/covers/boy_short.jpg",
+                "boy_long": "/root/bot/project/covers/boy_long.jpg",
+                "girl_short": "/root/bot/project/covers/girl_short.jpg",
+                "girl_long": "/root/bot/project/covers/girl_long.jpg",
+            }
         }
-    }
 
-    output_type = state.get("output_type", "banner")
-    template = state["template"]
+        if output_type not in assets:
+            output_type = "banner"
 
-    banner_path = assets[output_type][template]
+        if template not in assets[output_type]:
+            await message.answer("❌ Ошибка шаблона")
+            return
 
-    uid = str(uuid.uuid4())
+        banner_path = assets[output_type][template]
 
-    user_photo = os.path.join(BASE_PATH, f"{uid}.jpg")
-    result_photo = f"/root/bot/project/output/{uid}.jpg"
+        uid = str(uuid.uuid4())
 
-    os.makedirs("/root/bot/project/output", exist_ok=True)
+        user_photo = os.path.join(BASE_PATH, f"{uid}.jpg")
+        result_photo = f"/root/bot/project/output/{uid}.jpg"
 
-    file = await bot.get_file(message.photo[-1].file_id)
-    await bot.download_file(file.file_path, user_photo)
+        os.makedirs("/root/bot/project/output", exist_ok=True)
 
-    fix_image(user_photo)
+        file = await bot.get_file(message.photo[-1].file_id)
+        await bot.download_file(file.file_path, user_photo)
 
-    ACTIVE_USERS.add(user_id)
+        fix_image(user_photo)
 
-    pos = QUEUE.qsize() + len(ACTIVE_USERS) + 1
-    await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
+        ACTIVE_USERS.add(user_id)
 
-    await QUEUE.put(Job(
-        message=message,
-        user_photo=user_photo,
-        result_photo=result_photo,
-        banner_path=banner_path
-    ))
+        pos = QUEUE.qsize() + len(ACTIVE_USERS)
+        await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
 
+        await QUEUE.put(Job(
+            message=message,
+            user_photo=user_photo,
+            result_photo=result_photo,
+            banner_path=banner_path
+        ))
+
+    except Exception as e:
+        print("PHOTO ERROR:", e)
+        await message.answer("❌ Ошибка обработки фото")
+
+
+# ================= START =================
 
 async def start_workers():
     for i in range(WORKERS_COUNT):
