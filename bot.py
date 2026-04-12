@@ -228,7 +228,7 @@ def run_facefusion(source, target, output):
         "-s", source,
         "-t", target,
         "-o", output,
-        "--execution-providers", "cuda",
+        "--execution-providers", "cpu",
         "--face-mask-types", "box",
         "--face-mask-padding", "0.3",
         "--face-mask-blur", "0.1"
