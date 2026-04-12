@@ -153,20 +153,19 @@ async def fallback(message: Message):
 
 
 def run_facefusion(source, target, output):
-    try:
-        subprocess.run([
-            "/root/bot/project/venv/bin/python",
-            "facefusion.py",
-            "headless-run",
-            "-s", source,
-            "-t", target,
-            "-o", output,
-            "--face-mask-types", "box",
-            "--face-mask-padding", "0.3",
-            "--face-mask-blur", "0.1"
-        ], cwd=FACEFUSION_PATH)
-    except Exception as e:
-        print("FaceFusion error:", e)
+    result = subprocess.run([
+        "/root/bot/project/venv/bin/python",
+        "facefusion.py",
+        "headless-run",
+        "-s", source,
+        "-t", target,
+        "-o", output,
+        "--face-mask-types", "box",
+        "--face-mask-padding", "0.3",
+        "--face-mask-blur", "0.1"
+    ], cwd=FACEFUSION_PATH, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"FaceFusion error:\n{result.stderr}")
 
 
 def safe_remove(path: str):
@@ -199,7 +198,7 @@ async def worker(worker_id: int):
 
             # 🔍 быстрый чек результата (нет смысла ждать 60+ сек)
             ok = False
-            for _ in range(20):  # ~4 секунды максимум
+            for _ in range(150):  # 150 * 0.2 = 30 секунд
                 if os.path.exists(job.result_photo) and os.path.getsize(job.result_photo) > 0:
                     ok = True
                     break
