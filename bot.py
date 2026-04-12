@@ -14,8 +14,6 @@ from aiogram.types import (
 )
 from aiogram.filters import CommandStart
 from PIL import Image
-from collections import deque
-QUEUE_LIST = deque()
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
 CHANNEL = "@balimusic1"
@@ -268,19 +266,6 @@ def safe_remove(path: str):
 
 
 async def worker(worker_id: int):
-
-    global MODEL_WARMED
-
-    if not MODEL_WARMED:
-        await job.message.answer("🔥 прогреваю модель...")
-
-        run_facefusion(
-            "/root/bot/project/test.jpg",
-            "/root/bot/project/test.jpg",
-            "/root/bot/project/warm.jpg"
-        )
-
-    MODEL_WARMED = True
     while True:
         job = await QUEUE.get()
         user_id = job.message.from_user.id
@@ -326,7 +311,7 @@ async def worker(worker_id: int):
             USER_COOLDOWN[user_id] = time.time()
             
             try:
-                QUEUE_LIST.popleft()
+                QUEUE_LIST.remove(job)
             except:
                 pass
 
