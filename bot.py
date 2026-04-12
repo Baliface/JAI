@@ -91,8 +91,8 @@ async def choose_template(callback: CallbackQuery):
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="🖼 Баннер", callback_data="banner"),
-                InlineKeyboardButton(text="📕 Обложка", callback_data="cover"),
+                InlineKeyboardButton(text="🖼 Баннер", callback_data="type_banner"),
+                InlineKeyboardButton(text="📕 Обложка", callback_data="type_cover"),
             ]
         ])
 
@@ -100,7 +100,7 @@ async def choose_template(callback: CallbackQuery):
         await callback.answer()
         return
 
-    if callback.data in ["type_banner", "type_cover"]:
+    if callback.data in ["banner", "cover"]:
         if user_id not in USER_STATE:
             await callback.message.answer("👉 /start сначала")
             await callback.answer()
@@ -243,7 +243,7 @@ async def handle_photo(message: Message):
         }
     }
 
-    output_type = state.get("output_type", "banner").replace("type_", "")
+    output_type = state.get("output_type", "banner")
     template = state["template"]
 
     banner_path = assets[output_type][template]
