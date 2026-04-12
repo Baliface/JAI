@@ -3,7 +3,9 @@ import os
 import subprocess
 import uuid
 import time
+import sys
 from dataclasses import dataclass
+from facefusion import cli
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
     Message, FSInputFile,
@@ -12,6 +14,10 @@ from aiogram.types import (
 )
 from aiogram.filters import CommandStart
 from PIL import Image
+from collections import deque
+
+
+QUEUE_LIST = deque()
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
 CHANNEL = "@balimusic1"
@@ -26,7 +32,7 @@ FACEFUSION_PATH = "/root/bot/project/facefusion"
 USER_STATE = {}
 
 QUEUE = asyncio.Queue()
-WORKERS_COUNT = 1
+WORKERS_COUNT = 2
 
 WAITING_SUB = set()
 
@@ -39,6 +45,7 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
+MODEL_WARMED = False
 
 def warmup_facefusion():
     subprocess.run([
@@ -120,7 +127,7 @@ async def update_queue_positions():
         except:
             pass
 
-        await asyncio.sleep(3)
+        await asyncio.sleep(1)
 
 # 🔍 подписка
 async def check_sub(user_id: int) -> bool:
@@ -234,10 +241,7 @@ async def fallback(message: Message):
 
 
 def run_facefusion(source, target, output):
-    env = os.environ.copy()
-    env["PYTHONUNBUFFERED"] = "1"
-    result = subprocess.run([
-        "/root/bot/project/venv/bin/python",
+    sys.argv = [
         "facefusion.py",
         "headless-run",
         "-s", source,
@@ -245,20 +249,11 @@ def run_facefusion(source, target, output):
         "-o", output,
         "--execution-providers", "cpu",
         "--face-mask-types", "box",
-        "--face-mask-padding", "0.15",
+        "--face-mask-padding", "0.1",
         "--face-mask-blur", "0"
-    ], env=env, cwd=FACEFUSION_PATH, capture_output=True, text=True)
+    ]
 
-    print("=== FACEFUSION STDOUT ===")
-    print(result.stdout)
-
-    print("=== FACEFUSION STDERR ===")
-    print(result.stderr)
-
-    print("RETURN CODE:", result.returncode)
-
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr)
+    cli()
 
 
 def safe_remove(path: str):
@@ -275,11 +270,26 @@ def safe_remove(path: str):
 
 
 async def worker(worker_id: int):
+
+    global MODEL_WARMED
+
     while True:
         job = await QUEUE.get()
         user_id = job.message.from_user.id
 
         try:
+            if not MODEL_WARMED:
+                await job.message.answer("🔥 прогреваю модель...")
+
+                await asyncio.to_thread(
+                    run_facefusion,
+                    "/root/bot/project/test.jpg",
+                    "/root/bot/project/test.jpg",
+                    "/root/bot/project/warm.jpg"
+                )
+
+                MODEL_WARMED = True
+
             await job.message.answer("⚙️ Генерация... Ожидай 10-20 секунд!")
             
             await asyncio.to_thread(resize_image, job.user_photo)
@@ -320,7 +330,7 @@ async def worker(worker_id: int):
             USER_COOLDOWN[user_id] = time.time()
             
             try:
-                QUEUE_LIST.remove(job)
+                QUEUE_LIST.popleft()
             except:
                 pass
 
@@ -415,7 +425,7 @@ async def handle_photo(message: Message):
         banner_path=banner_path
     )
 
-    QUEUE_LIST.append(job)
+    QUEUE_LIST.appendleft(job)
     await QUEUE.put(job)
 
 async def main():
