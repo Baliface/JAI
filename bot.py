@@ -39,10 +39,18 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
+
+# =========================
+# ⚡ FACEFUSION DAEMON (NEW)
+# =========================
+
+FF_QUEUE = asyncio.Queue()
+
 def resize_image(path):
     img = Image.open(path)
     img = img.resize((512, 512))
     img.save(path)
+
 
 def load_users():
     if not os.path.exists(USERS_FILE):
@@ -58,6 +66,7 @@ def save_user(user_id: int):
 
 ALL_USERS = load_users()
 
+
 @dataclass
 class Job:
     message: Message
@@ -65,10 +74,79 @@ class Job:
     result_photo: str
     banner_path: str
 
+
+# =========================
+# 🚀 FACEFUSION WORKER (DAEMON)
+# =========================
+
+async def facefusion_worker():
+    print("🚀 FaceFusion daemon started")
+
+    while True:
+        job = await FF_QUEUE.get()
+
+        try:
+            await asyncio.to_thread(resize_image, job.user_photo)
+
+            result = subprocess.run([
+                "/root/bot/project/venv/bin/python",
+                "/root/bot/project/facefusion/facefusion.py",
+                "headless-run",
+                "-s", job.user_photo,
+                "-t", job.banner_path,
+                "-o", job.result_photo,
+                "--execution-providers", "cpu",
+                "--face-mask-types", "box",
+                "--face-mask-padding", "0.15",
+                "--face-mask-blur", "0"
+            ], capture_output=True, text=True)
+
+            print(result.stdout)
+            print(result.stderr)
+
+            ok = False
+            for _ in range(150):
+                if os.path.exists(job.result_photo) and os.path.getsize(job.result_photo) > 0:
+                    ok = True
+                    break
+                await asyncio.sleep(0.2)
+
+            if not ok:
+                await job.message.answer("❌ Лицо не найдено. Скинь другую фотку")
+            else:
+                await job.message.answer_photo(FSInputFile(job.result_photo))
+
+        except Exception:
+            await job.message.answer("❌ Ошибка: Не найдено лицо!")
+
+        finally:
+            try:
+                os.remove(job.user_photo)
+                os.remove(job.result_photo)
+            except:
+                pass
+
+            ACTIVE_USERS.discard(job.message.from_user.id)
+            USER_COOLDOWN[job.message.from_user.id] = time.time()
+
+            try:
+                QUEUE_LIST.remove(job)
+            except:
+                pass
+
+            QUEUE_MESSAGES.pop(job.message.from_user.id, None)
+
+            FF_QUEUE.task_done()
+
+
+# =========================
+# 📊 ADMIN
+# =========================
+
 @dp.message(F.text == "/admin")
 async def admin_panel(message: Message):
     if message.from_user.id != ADMIN_ID:
-        return  # никто кроме тебя не увидит
+        return
 
     queue_users = [job.message.from_user.id for job in QUEUE_LIST]
 
@@ -88,28 +166,32 @@ async def admin_panel(message: Message):
 
     await message.answer(text)
 
+
+# =========================
+# 📥 QUEUE UI
+# =========================
+
 async def update_queue_positions():
     while True:
-        try:
-            for i, job in enumerate(QUEUE_LIST):
-                user_id = job.message.from_user.id
-                pos = i + 1
+        for i, job in enumerate(QUEUE_LIST):
+            user_id = job.message.from_user.id
+            pos = i + 1
 
+            if user_id in QUEUE_MESSAGES:
                 try:
-                    # создаём/обновляем сообщение очереди
-                    if user_id in QUEUE_MESSAGES:
-                        await QUEUE_MESSAGES[user_id].edit_text(
-                            f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!"
-                        )
+                    await QUEUE_MESSAGES[user_id].edit_text(
+                        f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!"
+                    )
                 except:
                     pass
 
-        except:
-            pass
-
         await asyncio.sleep(3)
 
-# 🔍 подписка
+
+# =========================
+# 🔍 SUB CHECK
+# =========================
+
 async def check_sub(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(CHANNEL, user_id)
@@ -118,7 +200,10 @@ async def check_sub(user_id: int) -> bool:
         return False
 
 
-# 🚀 start
+# =========================
+# 🚀 START
+# =========================
+
 @dp.message(CommandStart())
 async def start(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -138,16 +223,16 @@ async def start(message: Message):
     )
 
 
-# ⚙️ выбор типа + подписка
+# =========================
+# ⚙️ CALLBACKS
+# =========================
+
 @dp.callback_query()
 async def choose_template(callback: CallbackQuery):
     user_id = callback.from_user.id
 
-    # шаг 1: выбор персонажа
     if callback.data in ["boy_short", "boy_long", "girl_short", "girl_long"]:
-        USER_STATE[user_id] = {
-            "template": callback.data
-        }
+        USER_STATE[user_id] = {"template": callback.data}
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -160,7 +245,6 @@ async def choose_template(callback: CallbackQuery):
         await callback.answer()
         return
 
-    # шаг 2: выбор типа результата
     if callback.data in ["type_banner", "type_cover"]:
         if user_id not in USER_STATE:
             await callback.message.answer("👉 /start сначала")
@@ -184,7 +268,6 @@ async def choose_template(callback: CallbackQuery):
             )
 
         await callback.answer()
-        return
 
 
 @dp.callback_query(F.data == "check_sub")
@@ -201,134 +284,14 @@ async def confirm_sub(callback: CallbackQuery):
     await callback.answer()
 
 
-async def subscription_watcher():
-    while True:
-        for user_id in list(WAITING_SUB):
-            if await check_sub(user_id):
-                WAITING_SUB.discard(user_id)
-                try:
-                    await bot.send_message(user_id, "🔥 Подписка подтверждена! Отправь фото!")
-                except:
-                    pass
-        await asyncio.sleep(10)
-
-
-@dp.message(F.text)
-async def fallback(message: Message):
-    if message.text.startswith("/"):
-        return
-    await message.answer("👉 /start → выбери тип")
-
-
-def run_facefusion(source, target, output):
-    result = subprocess.run([
-        "/root/bot/project/venv/bin/python",
-        "facefusion.py",
-        "headless-run",
-        "-s", source,
-        "-t", target,
-        "-o", output,
-        "--execution-providers", "cpu",
-        "--face-mask-types", "box",
-        "--face-mask-padding", "0.3",
-        "--face-mask-blur", "0.1"
-    ], cwd=FACEFUSION_PATH, capture_output=True, text=True)
-
-    print("=== FACEFUSION STDOUT ===")
-    print(result.stdout)
-
-    print("=== FACEFUSION STDERR ===")
-    print(result.stderr)
-
-    print("RETURN CODE:", result.returncode)
-
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr)
-
-
-def safe_remove(path: str):
-    try:
-        if path and os.path.exists(path):
-            for _ in range(3):
-                try:
-                    os.remove(path)
-                    break
-                except:
-                    time.sleep(0.3)
-    except:
-        pass
-
-
-async def worker(worker_id: int):
-    while True:
-        job = await QUEUE.get()
-        user_id = job.message.from_user.id
-
-        try:
-            await job.message.answer("⚙️ Генерация... Ожидай 10-20 секунд!")
-            
-            await asyncio.to_thread(resize_image, job.user_photo)
-
-            await asyncio.to_thread(
-                run_facefusion,
-                job.user_photo,
-                job.banner_path,
-                job.result_photo
-            )
-
-            # 🔍 быстрый чек результата (нет смысла ждать 60+ сек)
-            ok = False
-            for _ in range(150):  # 150 * 0.2 = 30 секунд
-                if os.path.exists(job.result_photo) and os.path.getsize(job.result_photo) > 0:
-                    ok = True
-                    break
-                await asyncio.sleep(0.2)
-
-            # ❌ НЕТ ЛИЦА / ОШИБКА
-            if not ok:
-                await job.message.answer("❌ Лицо не найдено. Скинь другую фотку")
-                return
-
-            # ✅ УСПЕХ
-            await job.message.answer_photo(FSInputFile(job.result_photo))
-
-            await asyncio.sleep(1)
-
-        except Exception as e:
-            await job.message.answer(f"❌ Ошибка: Не найдено лицо!")
-
-        finally:
-            safe_remove(job.user_photo)
-            safe_remove(job.result_photo)
-
-            ACTIVE_USERS.discard(user_id)
-            USER_COOLDOWN[user_id] = time.time()
-            
-            try:
-                QUEUE_LIST.remove(job)
-            except:
-                pass
-
-            QUEUE_MESSAGES.pop(user_id, None)
-
-            QUEUE.task_done()
-
-
-async def start_workers():
-    for i in range(WORKERS_COUNT):
-        asyncio.create_task(worker(i + 1))
-
-    asyncio.create_task(update_queue_positions())
-
+# =========================
+# 📸 PHOTO HANDLER
+# =========================
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
     user_id = message.from_user.id
 
-    if user_id not in ALL_USERS:
-        ALL_USERS.add(user_id)
-        save_user(user_id)
-    
     if user_id not in USER_STATE:
         await message.answer("👉 /start сначала")
         return
@@ -338,12 +301,11 @@ async def handle_photo(message: Message):
         await message.answer(f"❗️ Подпишись:\n{CHANNEL}")
         return
 
-    now = time.time()
-
     if user_id in ACTIVE_USERS:
         await message.answer("⛔ Уже идёт генерация")
         return
 
+    now = time.time()
     if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
         await message.answer("⛔ Кулдаун! Подожди еще 20 секунд!")
         return
@@ -367,16 +329,6 @@ async def handle_photo(message: Message):
         }
     }
 
-    output_type = state.get("output_type", "banner")
-    template = state["template"]
-
-    if output_type not in assets:
-        output_type = "banner"
-
-    if template not in assets[output_type]:
-        await message.answer("❌ Ошибка шаблона, /start сначала")
-        return
-
     banner_path = assets[output_type][template]
 
     uid = str(uuid.uuid4())
@@ -388,28 +340,25 @@ async def handle_photo(message: Message):
 
     ACTIVE_USERS.add(user_id)
 
-    pos = len(QUEUE_LIST) + len(ACTIVE_USERS)
-    msg = await message.answer(f"📥 Ты в очереди: #{pos}\n⏳ Подожди немного!")
+    msg = await message.answer("📥 Ты в очереди...")
     QUEUE_MESSAGES[user_id] = msg
 
-    job = Job(
-        message=message,
-        user_photo=user_photo,
-        result_photo=result_photo,
-        banner_path=banner_path
-    )
+    job = Job(message, user_photo, result_photo, banner_path)
 
     QUEUE_LIST.append(job)
-    await QUEUE.put(job)
+
+    await FF_QUEUE.put(job)
+
+
+# =========================
+# 🚀 STARTUP
+# =========================
 
 async def main():
-    await start_workers()
-    asyncio.create_task(subscription_watcher())
+    asyncio.create_task(facefusion_worker())
+    asyncio.create_task(update_queue_positions())
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-#venv\Scripts\activate
-#python bot.py
