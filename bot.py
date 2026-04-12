@@ -233,8 +233,17 @@ def run_facefusion(source, target, output):
         "--face-mask-padding", "0.3",
         "--face-mask-blur", "0.1"
     ], cwd=FACEFUSION_PATH, capture_output=True, text=True)
+
+    print("=== FACEFUSION STDOUT ===")
+    print(result.stdout)
+
+    print("=== FACEFUSION STDERR ===")
+    print(result.stderr)
+
+    print("RETURN CODE:", result.returncode)
+
     if result.returncode != 0:
-        raise RuntimeError(f"FaceFusion error:\n{result.stderr}")
+        raise RuntimeError(result.stderr)
 
 
 def safe_remove(path: str):
