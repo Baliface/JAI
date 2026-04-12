@@ -14,6 +14,7 @@ from aiogram.filters import CommandStart
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
 CHANNEL = "@balimusic1"
+ADMIN_ID = 1220199944
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -41,6 +42,28 @@ class Job:
     user_photo: str
     result_photo: str
     banner_path: str
+
+@dp.message(F.text == "/admin")
+async def admin_panel(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return  # никто кроме тебя не увидит
+
+    queue_users = [job.message.from_user.id for job in QUEUE_LIST]
+
+    text = (
+        f"👥 В очереди: {len(QUEUE_LIST)}\n"
+        f"⚙️ Активных: {len(ACTIVE_USERS)}\n"
+        f"⏳ Ждут подписку: {len(WAITING_SUB)}\n\n"
+        f"📋 Очередь:\n"
+    )
+
+    if queue_users:
+        for i, uid in enumerate(queue_users, start=1):
+            text += f"{i}. {uid}\n"
+    else:
+        text += "пусто"
+
+    await message.answer(text)
 
 async def update_queue_positions():
     while True:
@@ -161,7 +184,7 @@ async def subscription_watcher():
             if await check_sub(user_id):
                 WAITING_SUB.discard(user_id)
                 try:
-                    await bot.send_message(user_id, "🔥 Подписка подтверждена")
+                    await bot.send_message(user_id, "🔥 Подписка подтверждена! Отправь фото!")
                 except:
                     pass
         await asyncio.sleep(10)
