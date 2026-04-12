@@ -159,15 +159,21 @@ def run_facefusion(source, target, output):
         "headless-run",
         "-s", source,
         "-t", target,
-        "-o /root/bot/project/output/result.jpg", output,
+        "-o", output,
         "--face-mask-types", "box",
         "--face-mask-padding", "0.3",
         "--face-mask-blur", "0.1"
-    ], cwd=FACEFUSION_PATH, capture_output=True, text=True)
+    ],
+    cwd=FACEFUSION_PATH,
+    capture_output=True,
+    text=True)
 
+    print("===== FACEFUSION DEBUG =====")
     print("RETURN CODE:", result.returncode)
     print("STDERR:", result.stderr)
     print("STDOUT:", result.stdout)
+    print("OUTPUT FILE:", output)
+    print("============================")
 
 
 def safe_remove(path: str):
