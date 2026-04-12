@@ -27,6 +27,7 @@ USER_STATE = {}
 
 QUEUE = asyncio.Queue()
 WORKERS_COUNT = 2
+LOCK = asyncio.Lock()
 
 WAITING_SUB = set()
 
@@ -269,12 +270,13 @@ async def worker(worker_id: int):
             
             await asyncio.to_thread(resize_image, job.user_photo)
 
-            await asyncio.to_thread(
-                run_facefusion,
-                job.user_photo,
-                job.banner_path,
-                job.result_photo
-            )
+            async with LOCK:
+                await asyncio.to_thread(
+                    run_facefusion,
+                    job.user_photo,
+                    job.banner_path,
+                    job.result_photo
+                )
 
             # 🔍 быстрый чек результата (нет смысла ждать 60+ сек)
             ok = False
