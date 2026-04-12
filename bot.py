@@ -153,20 +153,21 @@ async def fallback(message: Message):
 
 
 def run_facefusion(source, target, output):
-    try:
-        subprocess.run([
-            "/root/bot/project/venv/bin/python",
-            "facefusion.py",
-            "headless-run",
-            "-s", source,
-            "-t", target,
-            "-o", output,
-            "--face-mask-types", "box",
-            "--face-mask-padding", "0.3",
-            "--face-mask-blur", "0.1"
-        ], cwd=FACEFUSION_PATH)
-    except Exception as e:
-        print("FaceFusion error:", e)
+    result = subprocess.run([
+        "/root/bot/project/venv/bin/python",
+        "facefusion.py",
+        "headless-run",
+        "-s", source,
+        "-t", target,
+        "-o /root/bot/project/output/result.jpg", output,
+        "--face-mask-types", "box",
+        "--face-mask-padding", "0.3",
+        "--face-mask-blur", "0.1"
+    ], cwd=FACEFUSION_PATH, capture_output=True, text=True)
+
+    print("RETURN CODE:", result.returncode)
+    print("STDERR:", result.stderr)
+    print("STDOUT:", result.stdout)
 
 
 def safe_remove(path: str):
@@ -288,8 +289,11 @@ async def handle_photo(message: Message):
     banner_path = assets[output_type][template]
 
     uid = str(uuid.uuid4())
+
+    os.makedirs("/root/bot/project/output", exist_ok=True)
+
     user_photo = os.path.join(BASE_PATH, f"{uid}_user.jpg")
-    result_photo = os.path.join(BASE_PATH, f"{uid}_result.jpg")
+    result_photo = f"/root/bot/project/output/{uid}_result.jpg"
 
     file = await bot.get_file(message.photo[-1].file_id)
     await bot.download_file(file.file_path, user_photo)
