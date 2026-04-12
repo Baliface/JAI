@@ -26,8 +26,7 @@ FACEFUSION_PATH = "/root/bot/project/facefusion"
 USER_STATE = {}
 
 QUEUE = asyncio.Queue()
-WORKERS_COUNT = 2
-LOCK = asyncio.Lock()
+WORKERS_COUNT = 1
 
 WAITING_SUB = set()
 
@@ -270,13 +269,12 @@ async def worker(worker_id: int):
             
             await asyncio.to_thread(resize_image, job.user_photo)
 
-            async with LOCK:
-                await asyncio.to_thread(
-                    run_facefusion,
-                    job.user_photo,
-                    job.banner_path,
-                    job.result_photo
-                )
+            await asyncio.to_thread(
+                run_facefusion,
+                job.user_photo,
+                job.banner_path,
+                job.result_photo
+            )
 
             # 🔍 быстрый чек результата (нет смысла ждать 60+ сек)
             ok = False
@@ -297,7 +295,7 @@ async def worker(worker_id: int):
             await asyncio.sleep(1)
 
         except Exception as e:
-            await job.message.answer(f"❌ Ошибка: {e}")
+            await job.message.answer(f"❌ Ошибка: Не найдено лицо!")
 
         finally:
             safe_remove(job.user_photo)
