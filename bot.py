@@ -15,7 +15,6 @@ from aiogram.types import (
 from aiogram.filters import CommandStart
 from PIL import Image
 from collections import deque
-
 QUEUE_LIST = deque()
 
 TOKEN = "8721546200:AAHANmwzeo_xIEVpIZ9zp87oGLCMsP3lGgc"
@@ -31,7 +30,7 @@ FACEFUSION_PATH = "/root/bot/project/facefusion"
 USER_STATE = {}
 
 QUEUE = asyncio.Queue()
-WORKERS_COUNT = 2
+WORKERS_COUNT = 1
 
 WAITING_SUB = set()
 
@@ -126,7 +125,7 @@ async def update_queue_positions():
         except:
             pass
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
 
 # 🔍 подписка
 async def check_sub(user_id: int) -> bool:
@@ -272,7 +271,16 @@ async def worker(worker_id: int):
 
     global MODEL_WARMED
 
+    if not MODEL_WARMED:
+        await job.message.answer("🔥 прогреваю модель...")
 
+        run_facefusion(
+            "/root/bot/project/test.jpg",
+            "/root/bot/project/test.jpg",
+            "/root/bot/project/warm.jpg"
+        )
+
+    MODEL_WARMED = True
     while True:
         job = await QUEUE.get()
         user_id = job.message.from_user.id
@@ -413,7 +421,7 @@ async def handle_photo(message: Message):
         banner_path=banner_path
     )
 
-    QUEUE_LIST.appendleft(job)
+    QUEUE_LIST.append(job)
     await QUEUE.put(job)
 
 async def main():
