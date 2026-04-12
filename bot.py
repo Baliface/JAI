@@ -3,6 +3,8 @@ import os
 import subprocess
 import uuid
 import time
+import redis
+import json
 from dataclasses import dataclass
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
@@ -39,6 +41,13 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+GPU_QUEUE = "gpu_queue"
+CPU_QUEUE = "cpu_queue"
+
+def push_job(queue_name, job):
+    r.lpush(queue_name, json.dumps(job))
 
 def warmup_facefusion():
     subprocess.run([
@@ -416,7 +425,19 @@ async def handle_photo(message: Message):
     )
 
     QUEUE_LIST.append(job)
-    await QUEUE.put(job)
+
+    job_data = {
+        "user_id": user_id,
+        "user_photo": user_photo,
+        "result_photo": result_photo,
+        "banner_path": banner_path
+    }
+    gpu_load = r.llen(GPU_QUEUE)
+
+    if gpu_load < 20:
+        push_job(GPU_QUEUE, job_data)
+    else:
+        push_job(CPU_QUEUE, job_data)
 
 async def main():
     await start_workers()
