@@ -476,10 +476,24 @@ async def handle_photo(message: Message):
     QUEUE_LIST.append(job)
     await QUEUE.put(job)
 
+async def broadcast_on_start():
+    text = "🚀 ХААХАХАХ МОЙ БОТ БОЛЬШЕ НЕ МОЖЕТ РОКАТЬ СМЕСЬ ЭТОГО АКТИВА! НО Я ПОЧИНИЛ! \nМожешь отправлять фото 👇"
+
+    for user_id in ALL_USERS:
+        try:
+            await bot.send_message(user_id, text)
+            await asyncio.sleep(0.05)
+        except:
+            pass
+
 async def main():
     await start_workers()
     asyncio.create_task(subscription_watcher())
+
+    await broadcast_on_start()  # 🔥 ВОТ ЭТО ДОБАВЬ
+
     await dp.start_polling(bot)
+
 
 
 if __name__ == "__main__":
