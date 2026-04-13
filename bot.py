@@ -288,6 +288,7 @@ def run_facefusion(source, target, output):
         "-t", target,
         "-o", output,
         "--execution-providers", "cpu",
+        "--face-detector-score", "0.3",
         "--face-mask-types", "box",
         "--face-mask-padding", "0.15",
         "--face-mask-blur", "0"
