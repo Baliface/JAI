@@ -182,6 +182,20 @@ async def choose_template(callback: CallbackQuery):
 
         USER_STATE[user_id]["output_type"] = "banner" if callback.data == "type_banner" else "cover"
 
+        # ✅ ТОЛЬКО ДЛЯ COVER — выбор волос
+        if USER_STATE[user_id]["output_type"] == "cover":
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🌑 Тёмные волосы", callback_data="hair_dark"),
+                    InlineKeyboardButton(text="🌕 Светлые волосы", callback_data="hair_light"),
+                ]
+            ])
+
+            await callback.message.answer("Выбери цвет волос 👇", reply_markup=kb)
+            await callback.answer()
+            return
+
+        # ✅ BANNER — сразу подписка
         if await check_sub(user_id):
             await callback.message.answer("✅ Ты уже подписан!\n📸 Отправь фото")
         else:
@@ -197,7 +211,6 @@ async def choose_template(callback: CallbackQuery):
             )
 
         await callback.answer()
-        return
 
 
 @dp.callback_query(F.data == "check_sub")
@@ -213,6 +226,33 @@ async def confirm_sub(callback: CallbackQuery):
 
     await callback.answer()
 
+@dp.callback_query(F.data.in_(["hair_light", "hair_dark"]))
+async def choose_hair(callback: CallbackQuery):
+    user_id = callback.from_user.id
+
+    if user_id not in USER_STATE:
+        await callback.message.answer("👉 /start сначала")
+        await callback.answer()
+        return
+
+    USER_STATE[user_id]["hair"] = "light" if callback.data == "hair_light" else "dark"
+
+    # дальше подписка
+    if await check_sub(user_id):
+        await callback.message.answer("🔥 Окей, теперь кидай фото 📸")
+    else:
+        WAITING_SUB.add(user_id)
+
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Я подписался", callback_data="check_sub")]
+        ])
+
+        await callback.message.answer(
+            f"❗️ Подпишись:\n{CHANNEL}\n\nИ нажми кнопку 👇",
+            reply_markup=kb
+        )
+
+    await callback.answer()
 
 async def subscription_watcher():
     while True:
@@ -365,7 +405,17 @@ async def handle_photo(message: Message):
         return
 
     state = USER_STATE[user_id]
+    
     template = state["template"]
+
+    if state.get("output_type") == "cover":
+        hair = state.get("hair")
+        if not hair:
+            await message.answer("👉 Сначала выбери цвет волос")
+            return
+
+        template = f"{template}_{hair}"
+    
     output_type = state.get("output_type", "banner")
 
     assets = {
@@ -376,10 +426,17 @@ async def handle_photo(message: Message):
             "girl_long": "/root/bot/project/banners/girl_long.jpg",
         },
         "cover": {
-            "boy_short": "/root/bot/project/covers/boy_short.jpg",
-            "boy_long": "/root/bot/project/covers/boy_long.jpg",
-            "girl_short": "/root/bot/project/covers/girl_short.jpg",
-            "girl_long": "/root/bot/project/covers/girl_long.jpg",
+            "boy_short_light": "/root/bot/project/covers/boy_short_dark.jpg",
+            "boy_short_dark": "/root/bot/project/covers/boy_short_dark.jpg",
+
+            "boy_long_light": "/root/bot/project/covers/boy_long_light.jpg",
+            "boy_long_dark": "/root/bot/project/covers/boy_long_dark.jpg",
+
+            "girl_short_light": "/root/bot/project/covers/girl_short_light.jpg",
+            "girl_short_dark": "/root/bot/project/covers/girl_short_dark.jpg",
+
+            "girl_long_light": "/root/bot/project/covers/girl_long_light.jpg",
+            "girl_long_dark": "/root/bot/project/covers/girl_long_dark.jpg",
         }
     }
 
