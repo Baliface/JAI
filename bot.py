@@ -523,6 +523,8 @@ async def main():
     await start_workers()
     asyncio.create_task(subscription_watcher())
 
+    asyncio.create_task(update_queue_positions())
+
     asyncio.create_task(limited_broadcast())  # 🔥 ВОТ ЭТО ДОБАВЬ
 
     await dp.start_polling(bot)
