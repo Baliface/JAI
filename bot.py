@@ -32,7 +32,7 @@ WAITING_SUB = set()
 
 ACTIVE_USERS = set()
 USER_COOLDOWN = {}
-COOLDOWN_SEC = 30
+COOLDOWN_SEC = 300
 
 QUEUE_LIST = []
 QUEUE_MESSAGES = {}  # user_id -> message for editing
@@ -406,7 +406,7 @@ async def handle_photo(message: Message):
         return
 
     if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
-        await message.answer("⛔ Кулдаун! Подожди еще 20 секунд!")
+        await message.answer("⛔️ Кулдаун! Сейчас огромная очередь, поэтому он временно повышен до 5 минут!")
         return
 
     state = USER_STATE[user_id]
