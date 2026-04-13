@@ -490,7 +490,7 @@ async def main():
     await start_workers()
     asyncio.create_task(subscription_watcher())
 
-    await broadcast_on_start()  # 🔥 ВОТ ЭТО ДОБАВЬ
+    asyncio.create_task(broadcast_on_start())  # 🔥 ВОТ ЭТО ДОБАВЬ
 
     await dp.start_polling(bot)
 
