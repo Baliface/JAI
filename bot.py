@@ -223,7 +223,7 @@ async def confirm_sub(callback: CallbackQuery):
 
     if await check_sub(user_id):
         WAITING_SUB.discard(user_id)
-        await callback.message.answer("🔥 Окей, теперь кидай фото 📸")
+        await callback.message.answer("🔥 Окей, теперь кидай фото")
     else:
         await callback.message.answer("❌ Ты не подписан")
         WAITING_SUB.add(user_id)
@@ -325,7 +325,7 @@ async def worker(worker_id: int):
         user_id = job.message.from_user.id
 
         try:
-            await job.message.answer("⚙️ Генерация... Ожидай 10-20 секунд!")
+            await job.message.answer("⚙️ Генерация... Ожидай 10 секунд!")
             
             await asyncio.to_thread(resize_image, job.user_photo)
 
