@@ -312,7 +312,7 @@ def run_facefusion(source, target, output):
         "--face-mask-types", "box",
         "--face-mask-padding", "0.15",
         "--face-mask-blur", "0"
-    ], env=env,cwd=FACEFUSION_PATH, capture_output=True, text=True)
+    ], env=env,cwd=FACEFUSION_PATH, capture_output=True, text=True, timeout=120)
 
     print("=== FACEFUSION STDOUT ===")
     print(result.stdout)
@@ -341,12 +341,12 @@ def safe_remove(path: str):
 
 async def worker(worker_id: int):
     while True:
-        job = await QUEUE.get()
-        user_id = job.message.from_user.id
-
         try:
-            await job.message.answer("⚙️ Генерация... Ожидай 10 секунд!")
-            
+            job = await QUEUE.get()
+            user_id = job.message.from_user.id
+
+            await job.message.answer("⚙️ Генерация...")
+
             await asyncio.to_thread(resize_image, job.user_photo)
 
             await asyncio.to_thread(
@@ -356,34 +356,36 @@ async def worker(worker_id: int):
                 job.result_photo
             )
 
-            # 🔍 быстрый чек результата (нет смысла ждать 60+ сек)
             ok = False
-            for _ in range(150):  # 150 * 0.2 = 30 секунд
+            for _ in range(150):
                 if os.path.exists(job.result_photo) and os.path.getsize(job.result_photo) > 0:
                     ok = True
                     break
                 await asyncio.sleep(0.2)
 
-            # ❌ НЕТ ЛИЦА / ОШИБКА
             if not ok:
-                await job.message.answer("❌ Лицо не найдено. Скинь другую фотку")
-                return
+                await job.message.answer("❌ Не найдено лицо")
+                continue   # 👈 ВАЖНО НЕ return
 
-            # ✅ УСПЕХ
             await job.message.answer_photo(FSInputFile(job.result_photo))
 
-            await asyncio.sleep(1)
-
         except Exception as e:
-            await job.message.answer(f"❌ Ошибка: Не найдено лицо!")
+            print("WORKER ERROR:", e)
+            try:
+                await job.message.answer("❌ Ошибка генерации")
+            except:
+                pass
 
         finally:
-            safe_remove(job.user_photo)
-            safe_remove(job.result_photo)
+            try:
+                safe_remove(job.user_photo)
+                safe_remove(job.result_photo)
+            except:
+                pass
 
             ACTIVE_USERS.discard(user_id)
             USER_COOLDOWN[user_id] = time.time()
-            
+
             try:
                 QUEUE_LIST.remove(job)
             except:
@@ -391,7 +393,10 @@ async def worker(worker_id: int):
 
             QUEUE_MESSAGES.pop(user_id, None)
 
-            QUEUE.task_done()
+            try:
+                QUEUE.task_done()
+            except:
+                pass
 
 
 async def start_workers():
@@ -504,21 +509,21 @@ async def handle_photo(message: Message):
     QUEUE_LIST.append(job)
     await QUEUE.put(job)
 
-async def broadcast_on_start():
-    text = "🚀 ХААХАХАХ МОЙ БОТ БОЛЬШЕ НЕ МОЖЕТ РОКАТЬ СМЕСЬ ЭТОГО АКТИВА! НО Я ПОЧИНИЛ! \nМожешь отправлять фото 👇"
-
-    for user_id in ALL_USERS:
+async def limited_broadcast():
+    for i, user_id in enumerate(list(ALL_USERS)):
         try:
-            await bot.send_message(user_id, text)
-            await asyncio.sleep(0.05)
+            await bot.send_message(user_id, "🚀 бот запущен")
         except:
             pass
+
+        if i % 30 == 0:
+            await asyncio.sleep(1)  # анти-бан
 
 async def main():
     await start_workers()
     asyncio.create_task(subscription_watcher())
 
-    asyncio.create_task(broadcast_on_start())  # 🔥 ВОТ ЭТО ДОБАВЬ
+    asyncio.create_task(limited_broadcast())  # 🔥 ВОТ ЭТО ДОБАВЬ
 
     await dp.start_polling(bot)
 
