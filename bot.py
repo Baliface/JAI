@@ -39,6 +39,25 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
+@dp.message(F.text.startswith("/broadcast"))
+async def broadcast(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = message.text.replace("/broadcast ", "")
+
+    sent = 0
+    failed = 0
+
+    for user_id in ALL_USERS:
+        try:
+            await bot.send_message(user_id, text)
+            sent += 1
+            await asyncio.sleep(0.05)  # чтобы не словить лимиты
+        except:
+            failed += 1
+
+    await message.answer(f"✅ Отправлено: {sent}\n❌ Ошибки: {failed}")
 
 def warmup_facefusion():
     subprocess.run([
