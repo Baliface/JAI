@@ -39,17 +39,22 @@ QUEUE_MESSAGES = {}  # user_id -> message for editing
 
 USERS_FILE = "users.txt"
 
+MAX_PHOTO_SIZE_MB = 8
+
 def warmup_facefusion():
-    subprocess.run([
-        "/root/bot/project/venv/bin/python",
-        "facefusion.py",
-        "headless-run",
-        "-s", "/root/bot/project/test.jpg",
-        "-t", "/root/bot/project/test.jpg",
-        "-o", "/root/bot/project/warmup.jpg",
-        "--execution-providers", "cpu",
-        "--face-mask-types", "box"
-    ], cwd=FACEFUSION_PATH)
+    try:
+        subprocess.run([
+            "/root/bot/project/venv/bin/python",
+            "facefusion.py",
+            "headless-run",
+            "-s", "/root/bot/project/test.jpg",
+            "-t", "/root/bot/project/test.jpg",
+            "-o", "/root/bot/project/warmup.jpg",
+            "--execution-providers", "cpu",
+            "--face-mask-types", "box"
+        ], cwd=FACEFUSION_PATH)
+    except Exception as e:
+        print("Ошибка:", e) 
 
 def resize_image(path):
     img = Image.open(path)
@@ -76,6 +81,22 @@ class Job:
     user_photo: str
     result_photo: str
     banner_path: str
+
+@dp.message(F.text.startswith("/broadcast"))
+async def broadcast(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    text = message.text.replace("/broadcast", "").strip()
+
+    for user_id in list(ALL_USERS):
+        try:
+            await bot.send_message(user_id, text)
+            await asyncio.sleep(0.05)
+        except:
+            pass
+
+    await message.answer("✅ Отправлено всем")
 
 @dp.message(F.text == "/admin")
 async def admin_panel(message: Message):
@@ -374,11 +395,10 @@ async def worker(worker_id: int):
 
 
 async def start_workers():
-    warmup_facefusion()
+    await asyncio.to_thread(warmup_facefusion)
+
     for i in range(WORKERS_COUNT):
         asyncio.create_task(worker(i + 1))
-
-    asyncio.create_task(update_queue_positions())
 
 
 @dp.message(F.photo)
@@ -457,7 +477,15 @@ async def handle_photo(message: Message):
     user_photo = os.path.join(BASE_PATH, f"{uid}_user.jpg")
     result_photo = os.path.join(BASE_PATH, f"{uid}_result.jpg")
 
-    file = await bot.get_file(message.photo[-1].file_id)
+    photo = message.photo[-1]
+
+    file_size_mb = photo.file_size / (1024 * 1024)
+
+    if file_size_mb > MAX_PHOTO_SIZE_MB:
+        await message.answer("❌ Фото слишком большое (макс 8MB). Сожми и отправь снова.")
+        return
+
+    file = await bot.get_file(photo.file_id)
     await bot.download_file(file.file_path, user_photo)
 
     ACTIVE_USERS.add(user_id)
