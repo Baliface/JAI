@@ -440,9 +440,6 @@ async def handle_photo(message: Message):
         }
     }
 
-    output_type = state.get("output_type", "banner")
-    template = state["template"]
-
     if output_type not in assets:
         output_type = "banner"
 
