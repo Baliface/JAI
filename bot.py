@@ -152,7 +152,11 @@ async def start(message: Message):
 
 
 # ⚙️ выбор типа + подписка
-@dp.callback_query()
+@dp.callback_query(F.data.in_([
+    "boy_short", "boy_long",
+    "girl_short", "girl_long",
+    "type_banner", "type_cover"
+]))
 async def choose_template(callback: CallbackQuery):
     user_id = callback.from_user.id
 
