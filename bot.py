@@ -32,7 +32,7 @@ WAITING_SUB = set()
 
 ACTIVE_USERS = set()
 USER_COOLDOWN = {}
-COOLDOWN_SEC = 300
+COOLDOWN_SEC = 30
 
 QUEUE_LIST = []
 QUEUE_MESSAGES = {}  # user_id -> message for editing
@@ -430,7 +430,8 @@ async def handle_photo(message: Message):
         return
 
     if now - USER_COOLDOWN.get(user_id, 0) < COOLDOWN_SEC:
-        await message.answer("⛔️ Кулдаун! Сейчас огромная очередь, поэтому он временно повышен до 5 минут!")
+        #await message.answer("⛔️ Кулдаун! Сейчас огромная очередь, поэтому он временно повышен до 5 минут!")
+        await message.answer("⛔️ Кулдаун! Подожди 30 секунд перед следующей генерацией!")
         return
 
     state = USER_STATE[user_id]
@@ -512,7 +513,8 @@ async def handle_photo(message: Message):
 async def limited_broadcast():
     for i, user_id in enumerate(list(ALL_USERS)):
         try:
-            await bot.send_message(user_id, "🚀 бот запущен")
+            #await bot.send_message(user_id, "🚀 бот запущен")
+            pass
         except:
             pass
 
